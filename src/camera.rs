@@ -1,4 +1,3 @@
-//camera.rs
 use nalgebra_glm::{Vec3, Mat4, look_at};
 
 pub struct Camera {
@@ -51,5 +50,12 @@ impl Camera {
         let rotated = nalgebra_glm::rotate_vec3(&rotated_yaw, delta_pitch, &right);
 
         self.eye = self.center + rotated * radius;
+    }
+
+    // Nueva función para zoom in/out
+    pub fn zoom(&mut self, amount: f32) {
+        let direction = self.forward(); // Vector desde la cámara hacia el centro
+        self.eye += direction * amount; // Mueve la cámara hacia adelante (zoom in) o atrás (zoom out)
+        // El centro no cambia, solo la cámara se mueve a lo largo de la línea de visión.
     }
 }
