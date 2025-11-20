@@ -16,10 +16,10 @@ pub fn create_projection_matrix(fov: f32, aspect: f32, near: f32, far: f32) -> M
 // Function to create the viewport matrix
 pub fn create_viewport_matrix(width: f32, height: f32) -> Mat4 {
     Mat4::new(
-        width / 2.0, 0.0, 0.0, 0.0,
-        0.0, height / 2.0, 0.0, 0.0,
+        width / 2.0, 0.0, 0.0, width / 2.0, // <--- Traslación X va en la 4ta columna
+        0.0, -height / 2.0, 0.0, height / 2.0, // <--- Traslación Y va en la 4ta columna. (Nota el negativo en escala para invertir Y)
         0.0, 0.0, 1.0, 0.0,
-        width / 2.0, height / 2.0, 0.0, 1.0,
+        0.0, 0.0, 0.0, 1.0,
     )
 }
 

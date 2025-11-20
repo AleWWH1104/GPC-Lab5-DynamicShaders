@@ -27,33 +27,26 @@ impl Uniforms {
 }
 
 // Rasterization function - renders a single triangle with the star shader
-pub fn triangle_3d_with_star_shader(v1: &Vertex, v2: &Vertex, v3: &Vertex, uniforms: &Uniforms, framebuffer: &mut Framebuffer, star: &Star) {
+pub fn triangle_3d_with_star_shader(v1: &Vertex, v2: &Vertex, v3: &Vertex, uniforms: &Uniforms, framebuffer: &mut Framebuffer, star: &Star, render_aura: bool) -> Result<(), Box<dyn std::error::Error>> {
     const WIDTH: usize = 800;
     const HEIGHT: usize = 600;
 
-    // 1. Transform vertices to clip space
     let mvp_matrix = uniforms.projection_matrix * uniforms.view_matrix * uniforms.model_matrix;
     let clip_v1 = mvp_matrix * Vec4::new(v1.position.x, v1.position.y, v1.position.z, 1.0);
     let clip_v2 = mvp_matrix * Vec4::new(v2.position.x, v2.position.y, v2.position.z, 1.0);
     let clip_v3 = mvp_matrix * Vec4::new(v3.position.x, v3.position.y, v3.position.z, 1.0);
 
-    // 2. Perspective Division (NDC - Normalized Device Coordinates)
-    // Check for w=0 to avoid division by zero
     if clip_v1.w == 0.0 || clip_v2.w == 0.0 || clip_v3.w == 0.0 {
-        // Skip this triangle if any vertex has w=0
-        return;
+        return Ok(());
     }
     let ndc_v1 = Vec3::new(clip_v1.x / clip_v1.w, clip_v1.y / clip_v1.w, clip_v1.z / clip_v1.w);
     let ndc_v2 = Vec3::new(clip_v2.x / clip_v2.w, clip_v2.y / clip_v2.w, clip_v2.z / clip_v2.w);
     let ndc_v3 = Vec3::new(clip_v3.x / clip_v3.w, clip_v3.y / clip_v3.w, clip_v3.z / clip_v3.w);
 
-    // 3. Viewport Transformation (Screen Space)
     let screen_v1 = uniforms.viewport_matrix * Vec4::new(ndc_v1.x, ndc_v1.y, ndc_v1.z, 1.0);
     let screen_v2 = uniforms.viewport_matrix * Vec4::new(ndc_v2.x, ndc_v2.y, ndc_v2.z, 1.0);
     let screen_v3 = uniforms.viewport_matrix * Vec4::new(ndc_v3.x, ndc_v3.y, ndc_v3.z, 1.0);
 
-    // 4. Rasterization Loop (Barycentric Coordinates)
-    // Convert to integers for pixel coordinates, but be careful of large values
     let x1 = screen_v1.x as i32;
     let y1 = screen_v1.y as i32;
     let x2 = screen_v2.x as i32;
@@ -61,62 +54,55 @@ pub fn triangle_3d_with_star_shader(v1: &Vertex, v2: &Vertex, v3: &Vertex, unifo
     let x3 = screen_v3.x as i32;
     let y3 = screen_v3.y as i32;
 
-    // Determine the bounding box, clamped to screen dimensions
     let min_x = x1.min(x2).min(x3).max(0).min(WIDTH as i32 - 1) as usize;
     let max_x = (x1.max(x2).max(x3) + 1).max(0).min(WIDTH as i32) as usize;
     let min_y = y1.min(y2).min(y3).max(0).min(HEIGHT as i32 - 1) as usize;
     let max_y = (y1.max(y2).max(y3) + 1).max(0).min(HEIGHT as i32) as usize;
 
     if min_x >= max_x || min_y >= max_y {
-        // Degenerate or off-screen triangle
-        return;
+        return Ok(());
     }
 
-    // Pre-calculate edge function coefficients for barycentric coords
     let det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
-    if det == 0 { return; } // Degenerate triangle
+    if det == 0 { return Ok(()); }
 
     for y in min_y..max_y {
         for x in min_x..max_x {
             let px = x as i32;
             let py = y as i32;
 
-            // Calculate barycentric coordinates (w1, w2, w3)
             let w1 = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) as f32 / det as f32;
             let w2 = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) as f32 / det as f32;
             let w3 = 1.0 - w1 - w2;
 
-            // Check if point is inside the triangle
             if w1 >= 0.0 && w2 >= 0.0 && w3 >= 0.0 {
-                // Interpolate Z-depth using barycentric coordinates
                 let z = w1 * screen_v1.z + w2 * screen_v2.z + w3 * screen_v3.z;
 
-                // Calculate buffer index safely
                 let buffer_index = y * WIDTH + x;
                 if buffer_index >= framebuffer.buffer.len() {
-                    // This should not happen with the clamped min/max, but good to check
                     continue;
                 }
 
-                // Check Z-buffer
                 if z < framebuffer.zbuffer[buffer_index] {
-                    // Interpolate world position for shading
                     let world_pos = w1 * v1.position + w2 * v2.position + w3 * v3.position;
-                    let normal = (w1 * v1.normal + w2 * v2.normal + w3 * v3.normal).normalize(); // Interpolate and normalize normal
+                    let normal = (w1 * v1.normal + w2 * v2.normal + w3 * v3.normal).normalize();
 
-                    // Evaluate the star shader at this fragment's world position
-                    let (color_raylib, _distance) = star.evaluate_at(&world_pos, &normal, uniforms.time);
+                    // Usar la función que incluye aura y rayos si el flag está activado
+                    let (color_raylib, _) = if render_aura {
+                        star.evaluate_at_with_effects(&world_pos, &normal, uniforms.time)
+                    } else {
+                        star.evaluate_at(&world_pos, &normal, uniforms.time)
+                    };
 
-                    // Convert raylib Color to u32 for the framebuffer
                     let color_u32 = ((color_raylib.r as u32) << 16) | ((color_raylib.g as u32) << 8) | (color_raylib.b as u32);
 
-                    // Write color and depth to framebuffer
                     framebuffer.buffer[buffer_index] = color_u32;
                     framebuffer.zbuffer[buffer_index] = z;
                 }
             }
         }
     }
+    Ok(())
 }
 
 pub fn triangle_3d_with_planet_shader(v1: &Vertex, v2: &Vertex, v3: &Vertex, uniforms: &Uniforms, framebuffer: &mut Framebuffer, planet: &Planet) -> Result<(), Box<dyn std::error::Error>> {

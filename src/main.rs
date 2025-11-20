@@ -3,12 +3,14 @@ mod vertex;
 mod fragment;
 mod camera;
 mod shaders;
-mod matrix; // Import the new matrix module
-mod triangle; // Import the new triangle module
+mod matrix; 
+mod triangle;
+mod skybox;
 
-use crate::shaders::star::Star; // Import the Star struct
+use crate::skybox::Skybox;
+use crate::shaders::star::Star; 
 use crate::shaders::planet::{Planet, PlanetType};
-use crate::vertex::Vertex; // Import Vertex
+use crate::vertex::Vertex; 
 use crate::triangle::{triangle_3d_with_star_shader,triangle_3d_with_planet_shader, Uniforms}; // Import the rendering function and Uniforms
 use crate::matrix::{create_projection_matrix, create_viewport_matrix, create_model_matrix}; // Import matrix functions
 
@@ -19,7 +21,7 @@ use std::f32::consts::PI;
 
 use framebuffer::Framebuffer;
 use camera::Camera;
-use raylib::prelude::Color; // We still need this for the Star's color types
+use raylib::prelude::Color; 
 
 
 const WIDTH: usize = 800;
@@ -79,7 +81,7 @@ fn load_obj(filename: &str) -> Result<Vec<Vertex>, Box<dyn std::error::Error>> {
     Ok(vertices)
 }
 
-fn render_orbit(framebuffer: &mut Framebuffer, center: &Vec3, radius: f32, color: u32) {
+fn render_orbit(_framebuffer: &mut Framebuffer, center: &Vec3, radius: f32, _color: u32) {
     let steps = 100;
     let angle_step = 2.0 * PI / steps as f32;
 
@@ -87,10 +89,10 @@ fn render_orbit(framebuffer: &mut Framebuffer, center: &Vec3, radius: f32, color
         let angle1 = i as f32 * angle_step;
         let angle2 = (i + 1) as f32 * angle_step;
 
-        let x1 = center.x + radius * angle1.cos();
-        let z1 = center.z + radius * angle1.sin();
-        let x2 = center.x + radius * angle2.cos();
-        let z2 = center.z + radius * angle2.sin();
+        let _x1 = center.x + radius * angle1.cos(); // Marcar como no usadas
+        let _z1 = center.z + radius * angle1.sin();
+        let _x2 = center.x + radius * angle2.cos();
+        let _z2 = center.z + radius * angle2.sin();
     }
 }
 
@@ -98,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut framebuffer = Framebuffer::new(WIDTH, HEIGHT);
     
     let mut window = Window::new(
-        "Solar System - Software Renderer",
+        "Sistema Solar - Iris Ayala",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
@@ -119,8 +121,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sphere_mesh = load_obj("models/sphere.obj")?;
     println!("Loaded {} vertices from sphere.obj", sphere_mesh.len());
 
-    let mut sun = Star::new(1.5, Vec3::new(0.0, 0.0, 0.0));
+    // Crear el Skybox con 5000 estrellas
+    let skybox = Skybox::new(5000);
 
+    // Crear sol
+    let mut sun = Star::new(3.0, Vec3::new(0.0, 0.0, 0.0));
+
+    //Crear planetas
     let mut planets = vec![
         Planet::new(PlanetType::Rocky, 0.4, 4.0, 0.8, 0.6, 0.0),
         Planet::new(PlanetType::Cloudy, 0.7, 6.5, 0.6, 0.3, PI / 2.0), // Planeta nube celeste
@@ -190,10 +197,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         framebuffer.clear();
 
-        // --- Render Skybox (si se implementa) ---
-        // Renderizar el modelo skybox con una matriz de vista donde la translación es cero (siempre centrado en la cámara)
+        // Renderizar las skybox (fondo)
+        skybox.render(&mut framebuffer, &uniforms, camera.eye);
 
-        // --- Render Orbit Lines (Opcional) ---
+        // --- Render Orbit Lines ---
         for planet in &planets {
             let orbit_color = 0x404040; // Gris oscuro
             render_orbit(&mut framebuffer, &planet.orbit_center, planet.orbit_radius, orbit_color);
@@ -202,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // --- Render Sun ---
         uniforms.model_matrix = create_model_matrix(
             sun.position,
-            1.0, // Escala
+            sun.radius, 
             Vec3::new(sun.rotation, sun.rotation * 0.5, 0.0), // Rotación
         );
         for i in (0..sphere_mesh.len()).step_by(3) {
@@ -210,7 +217,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let v1 = &sphere_mesh[i];
                 let v2 = &sphere_mesh[i + 1];
                 let v3 = &sphere_mesh[i + 2];
-                triangle_3d_with_star_shader(v1, v2, v3, &uniforms, &mut framebuffer, &sun);
+                // PASAR EL FLAG DE AURA
+                triangle_3d_with_star_shader(v1, v2, v3, &uniforms, &mut framebuffer, &sun, false)?; // render_aura = true
             }
         }
 
@@ -226,7 +234,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let v1 = &sphere_mesh[i];
                     let v2 = &sphere_mesh[i + 1];
                     let v3 = &sphere_mesh[i + 2];
-                    // Pasar el planeta en lugar del sol
                     triangle_3d_with_planet_shader(v1, v2, v3, &uniforms, &mut framebuffer, planet)?;
                 }
             }
